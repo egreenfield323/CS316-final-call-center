@@ -2,7 +2,9 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static java.lang.Thread.sleep;
 
@@ -37,8 +39,10 @@ public class CallCenter {
     /*
      * Create queues
      */
-    private static Queue<Integer> waitQueue = new LinkedList<>();
-    private static Queue<Integer> dispatchQueue = new LinkedList<>();
+    private static Queue<Customer> waitQueue = new LinkedList<>();
+    private static Semaphore waitLock = new Semaphore(1, true);
+    private static Queue<Customer> dispatchQueue = new LinkedList<>();
+    private static ReentrantLock displatchLock = new ReentrantLock();
 
     /*
      * Create the greeter and agents threads first, and then create the customer
@@ -99,8 +103,9 @@ public class CallCenter {
 
         @Override
         public void run() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'run'");
+            for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
+                serve(dispatchQueue.remove().ID);
+            }
         }
 
     }
@@ -112,10 +117,16 @@ public class CallCenter {
      */
     public static class Greeter implements Runnable {
 
+        public Greeter(Customer c) {
+            this.customer = c;
+        }
+
         @Override
         public void run() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'run'");
+            for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
+                dispatchQueue.add(waitQueue.remove());
+                System.out.println(dispatchQueue.size());
+            }
         }
 
     }
@@ -135,8 +146,7 @@ public class CallCenter {
 
         @Override
         public void run() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'run'");
+            waitQueue.add(this);
         }
     }
 
