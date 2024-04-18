@@ -29,11 +29,29 @@ public class CallCenter {
      */
     private static final int NUMBER_OF_THREADS = 10;
 
+
+    /*
+        Create queues
+    */
+    private static Queue<Integer> waitQueue = new LinkedList<>();
+    private static Queue<Integer> dispatchQueue = new LinkedList<>();
+
+
     /*
         Create the greeter and agents threads first, and then create the customer threads.
      */
     public static void main(String[] args) {
+        ExecutorService es = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
 
+        for (int i = 0; i < NUMBER_OF_AGENTS; i++) {
+            es.submit(new Agent());
+        }
+
+        for (int i = NUMBER_OF_CUSTOMERS; i <; i++) {
+            es.submit(new Customer());
+        }
+
+        sleep(ThreadLocalRandom.current().nextInt(0, 150));
         //Insert a random sleep between 0 and 150 miliseconds after submitting every customer task,
         // to simulate a random interval between customer arrivals.
 
