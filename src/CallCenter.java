@@ -73,6 +73,7 @@ public class CallCenter {
 
     /*
         The greeter class.
+        To greet a customer, tell the customer their current position in the dispatch queue.
      */
     public static class Greeter implements Runnable {
 
