@@ -42,7 +42,7 @@ public class CallCenter {
     private static Queue<Customer> waitQueue = new LinkedList<>();
     private static Semaphore waitLock = new Semaphore(1, true);
     private static Queue<Customer> dispatchQueue = new LinkedList<>();
-    private static ReentrantLock displatchLock = new ReentrantLock();
+    private static ReentrantLock dispatchLock = new ReentrantLock();
 
     /*
      * Create the greeter and agents threads first, and then create the customer
@@ -53,18 +53,19 @@ public class CallCenter {
 
         try {
             for (int i = 0; i < NUMBER_OF_AGENTS; i++) {
-                es.submit(new Agent((int) Math.random() + 1111 * 9999));
+                es.submit(new Agent(i));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
 
             for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
-                es.submit(new Customer((int) Math.random() + 1111 * 9999));
+                es.submit(new Customer(i));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
+        es.shutdown();
         // Insert a random sleep between 0 and 150 miliseconds after submitting every
         // customer task,
         // to simulate a random interval between customer arrivals.
@@ -103,9 +104,15 @@ public class CallCenter {
 
         @Override
         public void run() {
-            for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
-                serve(dispatchQueue.remove().ID);
+            try {
+                waitLock.acquire();
+                for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
+                    serve(dispatchQueue.remove().ID);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
+            waitLock.release();
         }
 
     }
@@ -116,6 +123,8 @@ public class CallCenter {
      * queue.
      */
     public static class Greeter implements Runnable {
+
+        private static Customer customer;
 
         public Greeter(Customer c) {
             this.customer = c;
