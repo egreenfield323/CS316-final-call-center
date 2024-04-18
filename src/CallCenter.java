@@ -53,12 +53,12 @@ public class CallCenter {
 
         try {
             for (int i = 0; i < NUMBER_OF_AGENTS; i++) {
-                es.submit(new Agent(3));
+                es.submit(new Agent((int) Math.random() + 1111 * 9999));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
 
             for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
-                es.submit(new Customer(2));
+                es.submit(new Customer((int) Math.random() + 1111 * 9999));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
         } catch (Exception e) {
