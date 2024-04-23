@@ -4,6 +4,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static java.lang.Thread.sleep;
@@ -40,9 +41,12 @@ public class CallCenter {
      * Create queues
      */
     private static Queue<Customer> waitQueue = new LinkedList<>();
-    private static Semaphore waitLock = new Semaphore(1, true);
+    // private static Semaphore waitLock = new Semaphore(1, true);
     private static Queue<Customer> dispatchQueue = new LinkedList<>();
+    private static ReentrantLock waitLock = new ReentrantLock();
     private static ReentrantLock dispatchLock = new ReentrantLock();
+    private static Condition waitQueueNotEmpty = waitLock.newCondition();
+    private static Condition dispatchQueueNotEmpty = waitLock.newCondition();
 
     /*
      * Create the greeter and agents threads first, and then create the customer
@@ -52,20 +56,22 @@ public class CallCenter {
         ExecutorService es = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
 
         try {
+            Greeter greeter = new Greeter();
+            es.submit(greeter);
             for (int i = 0; i < NUMBER_OF_AGENTS; i++) {
                 es.submit(new Agent(i));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
-
             for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
                 es.submit(new Customer(i));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        es.shutdown();
+        // es.shutdown();
         // Insert a random sleep between 0 and 150 miliseconds after submitting every
         // customer task,
         // to simulate a random interval between customer arrivals.
@@ -104,15 +110,19 @@ public class CallCenter {
 
         @Override
         public void run() {
+            dispatchLock.lock();
             try {
-                waitLock.acquire();
+                while (dispatchQueue.isEmpty()) {
+                    dispatchQueueNotEmpty.await();
+                }
                 for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
                     serve(dispatchQueue.remove().ID);
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
+            } finally {
+                dispatchLock.unlock();
             }
-            waitLock.release();
         }
 
     }
@@ -124,20 +134,22 @@ public class CallCenter {
      */
     public static class Greeter implements Runnable {
 
-        private static Customer customer;
-
-        public Greeter(Customer c) {
-            this.customer = c;
-        }
-
         @Override
         public void run() {
-            for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
+            dispatchLock.lock();
+            try {
+                while (waitQueue.isEmpty()) {
+                    waitQueueNotEmpty.await();
+                }
                 dispatchQueue.add(waitQueue.remove());
-                System.out.println(dispatchQueue.size());
+                System.out.println("position in dispatch queue: " + dispatchQueue.size());
+                dispatchQueueNotEmpty.signal();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                dispatchLock.unlock();
             }
         }
-
     }
 
     /*
@@ -155,7 +167,15 @@ public class CallCenter {
 
         @Override
         public void run() {
-            waitQueue.add(this);
+            waitLock.lock();
+            try {
+                waitQueue.add(this);
+                waitQueueNotEmpty.signal();
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                waitLock.unlock();
+            }
         }
     }
 
