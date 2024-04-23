@@ -2,7 +2,6 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -46,7 +45,7 @@ public class CallCenter {
     private static ReentrantLock waitLock = new ReentrantLock();
     private static ReentrantLock dispatchLock = new ReentrantLock();
     private static Condition waitQueueNotEmpty = waitLock.newCondition();
-    private static Condition dispatchQueueNotEmpty = waitLock.newCondition();
+    private static Condition dispatchQueueNotEmpty = dispatchLock.newCondition();
 
     /*
      * Create the greeter and agents threads first, and then create the customer
@@ -56,14 +55,13 @@ public class CallCenter {
         ExecutorService es = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
 
         try {
-            Greeter greeter = new Greeter();
-            es.submit(greeter);
+            es.submit(new Greeter());
             for (int i = 0; i < NUMBER_OF_AGENTS; i++) {
-                es.submit(new Agent(i));
+                es.submit(new Agent(i + 1));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
             for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
-                es.submit(new Customer(i));
+                es.submit(new Customer(i + 1));
                 sleep(ThreadLocalRandom.current().nextInt(0, 150));
             }
 
@@ -71,7 +69,7 @@ public class CallCenter {
             e.printStackTrace();
         }
 
-        // es.shutdown();
+        es.shutdown();
         // Insert a random sleep between 0 and 150 miliseconds after submitting every
         // customer task,
         // to simulate a random interval between customer arrivals.
@@ -110,18 +108,20 @@ public class CallCenter {
 
         @Override
         public void run() {
-            dispatchLock.lock();
-            try {
-                while (dispatchQueue.isEmpty()) {
-                    dispatchQueueNotEmpty.await();
+            for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
+                dispatchLock.lock();
+                Customer c = null;
+                try {
+                    while (dispatchQueue.isEmpty()) {
+                        dispatchQueueNotEmpty.await();
+                    }
+                    c = dispatchQueue.remove();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    dispatchLock.unlock();
                 }
-                for (int i = 0; i < CUSTOMERS_PER_AGENT; i++) {
-                    serve(dispatchQueue.remove().ID);
-                }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } finally {
-                dispatchLock.unlock();
+                serve(c.ID);
             }
         }
 
@@ -136,18 +136,28 @@ public class CallCenter {
 
         @Override
         public void run() {
-            dispatchLock.lock();
-            try {
-                while (waitQueue.isEmpty()) {
-                    waitQueueNotEmpty.await();
+            for (int i = 0; i < NUMBER_OF_CUSTOMERS; i++) {
+
+                waitLock.lock();
+                Customer c = null;
+                try {
+                    while (waitQueue.isEmpty()) {
+                        waitQueueNotEmpty.await();
+                    }
+                    c = waitQueue.remove();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    waitLock.unlock();
                 }
-                dispatchQueue.add(waitQueue.remove());
-                System.out.println("position in dispatch queue: " + dispatchQueue.size());
-                dispatchQueueNotEmpty.signal();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } finally {
-                dispatchLock.unlock();
+                dispatchLock.lock();
+                try {
+                    dispatchQueue.add(c);
+                    System.out.println("Greeting customer " + (i + 1) + " position in dispatch queue: " + dispatchQueue.size());
+                    dispatchQueueNotEmpty.signal();
+                } finally {
+                    dispatchLock.unlock();
+                }
             }
         }
     }
@@ -171,12 +181,9 @@ public class CallCenter {
             try {
                 waitQueue.add(this);
                 waitQueueNotEmpty.signal();
-            } catch (Exception e) {
-                e.printStackTrace();
             } finally {
                 waitLock.unlock();
             }
         }
     }
-
 }
